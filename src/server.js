@@ -9,11 +9,16 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
 import https from 'https';
+import fs from 'fs';
 
 // Configuration
 const PORT = process.env.PORT || 3000;
+const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
 const PROXMOX_HOST = process.env.PROXMOX_HOST || 'https://proxmox.volskyi-dmytro.com';
 const PROXMOX_TOKEN = process.env.PROXMOX_TOKEN || '';
+const SSL_CERT_PATH = process.env.SSL_CERT_PATH || '';
+const SSL_KEY_PATH = process.env.SSL_KEY_PATH || '';
+const ENABLE_HTTPS = process.env.ENABLE_HTTPS === 'true';
 
 console.log('Starting Proxmox MCP Server...');
 console.log(`Port: ${PORT}`);
@@ -187,8 +192,32 @@ app.post('/message', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
-  console.log(`Health: http://0.0.0.0:${PORT}/health`);
-  console.log(`SSE: http://0.0.0.0:${PORT}/sse`);
-});
+if (ENABLE_HTTPS && SSL_CERT_PATH && SSL_KEY_PATH) {
+  try {
+    const httpsOptions = {
+      key: fs.readFileSync(SSL_KEY_PATH),
+      cert: fs.readFileSync(SSL_CERT_PATH)
+    };
+
+    https.createServer(httpsOptions, app).listen(HTTPS_PORT, '0.0.0.0', () => {
+      console.log(`HTTPS Server running on https://0.0.0.0:${HTTPS_PORT}`);
+      console.log(`Health: https://0.0.0.0:${HTTPS_PORT}/health`);
+      console.log(`SSE: https://0.0.0.0:${HTTPS_PORT}/sse`);
+    });
+  } catch (error) {
+    console.error('Failed to start HTTPS server:', error.message);
+    console.log('Falling back to HTTP...');
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`HTTP Server running on http://0.0.0.0:${PORT}`);
+      console.log(`Health: http://0.0.0.0:${PORT}/health`);
+      console.log(`SSE: http://0.0.0.0:${PORT}/sse`);
+    });
+  }
+} else {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`HTTP Server running on http://0.0.0.0:${PORT}`);
+    console.log(`Health: http://0.0.0.0:${PORT}/health`);
+    console.log(`SSE: http://0.0.0.0:${PORT}/sse`);
+  });
+}
