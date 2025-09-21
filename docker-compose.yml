@@ -11,9 +11,32 @@ services:
       - PORT=3000
       - PROXMOX_HOST=${PROXMOX_HOST}
       - PROXMOX_TOKEN=${PROXMOX_TOKEN}
+    # Fix DNS resolution
+    extra_hosts:
+      - "proxmox.volskyi-dmytro.com:192.168.50.111"
+    # Optional: specify DNS servers if needed
+    dns:
+      - 192.168.50.1  # Your router (adjust if different)
+      - 1.1.1.1       # Cloudflare DNS as fallback
+    # Development mode: mount source for live updates
+    volumes:
+      - ./src:/app/src:ro  # Read-only mount for security
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
-      - default
+      - mcp-network
 
 networks:
-  default:
+  mcp-network:
     driver: bridge
