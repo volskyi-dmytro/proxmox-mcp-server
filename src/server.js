@@ -26,6 +26,7 @@ console.log(`Proxmox Host: ${PROXMOX_HOST}`);
 
 // Create Express app
 const app = express();
+app.set('trust proxy', true);
 app.use(cors());
 app.use(express.json());
 
@@ -181,15 +182,43 @@ app.get('/sse', async (req, res) => {
   }
 });
 
-// Message endpoint
-app.post('/message', (req, res) => {
-  if (!activeTransport) {
-    return res.status(404).json({ error: 'No active connection' });
+// Message endpoint (robust to proxy quirks)
+app.post(
+  '/message',
+  // Force JSON parsing even if Content-Type is wrong
+  express.json({ type: '*/*', limit: '5mb' }),
+  (req, res) => {
+    if (!activeTransport) {
+      return res.status(404).json({ error: 'No active connection' });
+    }
+
+    try {
+      // Prefer the SDK's built-in Express handler if available
+      if (typeof activeTransport.handlePost === 'function') {
+        return activeTransport.handlePost(req, res);
+      }
+
+      // Fallback: pass the parsed JSON-RPC message directly
+      if (!req.body) {
+        return res.status(400).json({ error: 'Empty body' });
+      }
+
+      // Important: handleMessage expects the *message*, not the Express req
+      const maybePromise = activeTransport.handleMessage(req.body);
+      // If the SDK returns a promise, wait for it before ending the response
+      if (maybePromise?.then) {
+        return maybePromise.then(() => res.status(204).end()).catch(err => {
+          console.error('Message handling error:', err);
+          return res.status(500).json({ error: 'Internal error' });
+        });
+      }
+      return res.status(204).end();
+    } catch (err) {
+      console.error('Message handling error:', err);
+      return res.status(500).json({ error: 'Internal error' });
+    }
   }
-  
-  // The transport handles the message
-  activeTransport.handleMessage(req, res);
-});
+);
 
 // Start server
 if (ENABLE_HTTPS && SSL_CERT_PATH && SSL_KEY_PATH) {
