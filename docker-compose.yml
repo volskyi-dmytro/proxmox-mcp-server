@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  proxmox-mcp:
+    build: .
+    container_name: proxmox-mcp
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - PROXMOX_HOST=${PROXMOX_HOST}
+      - PROXMOX_TOKEN=${PROXMOX_TOKEN}
+    networks:
+      - default
+
+networks:
+  default:
+    driver: bridge
